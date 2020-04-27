@@ -61,5 +61,10 @@
             }
             return base.GetCurrentWeaponRange();
         }
+
+        protected override bool ShouldCurrentWeaponTriggerMovement(IStaticWorldObject testWorldObject)
+        {
+            return SelectedItem.ProtoItem is ProtoItemToolAxe;
+        }
     }
 }

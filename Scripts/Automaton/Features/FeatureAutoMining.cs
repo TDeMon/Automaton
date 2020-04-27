@@ -5,6 +5,7 @@
     using AtomicTorch.CBND.CoreMod.Items.Tools.Pickaxes;
     using AtomicTorch.CBND.CoreMod.StaticObjects.Minerals;
     using AtomicTorch.CBND.GameApi.Data;
+    using AtomicTorch.CBND.GameApi.Data.World;
     using AtomicTorch.CBND.GameApi.Scripting;
 
     public class FeatureAutoMining: ProtoFeatureAutoHarvest
@@ -27,6 +28,11 @@
                 return toolPickaxe.RangeMax;
             }
             return base.GetCurrentWeaponRange();
+        }
+
+        protected override bool ShouldCurrentWeaponTriggerMovement(IStaticWorldObject testWorldObject)
+        {
+            return SelectedItem.ProtoItem is ProtoItemToolPickaxe;
         }
     }
 }

@@ -8,9 +8,12 @@
     using AtomicTorch.CBND.CoreMod.Items.Weapons;
     using AtomicTorch.CBND.CoreMod.Systems.Physics;
     using AtomicTorch.CBND.CoreMod.Systems.Weapons;
+    using AtomicTorch.CBND.GameApi.Data.Items;
     using AtomicTorch.CBND.GameApi.Data.Physics;
     using AtomicTorch.CBND.GameApi.Data.World;
+    using AtomicTorch.CBND.GameApi.Extensions;
     using AtomicTorch.CBND.GameApi.Scripting;
+    using AtomicTorch.GameEngine.Common.Extensions;
     using AtomicTorch.GameEngine.Common.Primitives;
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
@@ -50,13 +53,43 @@
             return true;
         }
 
+        protected virtual bool ShouldCurrentWeaponTriggerMovement(IStaticWorldObject testWorldObject)
+        {
+            return true;
+        }
+
         private void FindAndAttackTarget( )
         {
             var fromPos = CurrentCharacter.Position + GetWeaponOffset();
+            
+            using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
+                                          .TestCircle(position: fromPos,
+                                                      radius: this.GetCurrentWeaponRange() * 25, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit.
+                                                      collisionGroup: CollisionGroups.HitboxMelee);
+                                          
+            // I'd rather chain these methods, but it seems like `using` has some relation to IDisposable. I'm not sure of consequences not using it might cause, so I'll copy the code. It's not like I want to keep your memeory free from leaks or anything.
+            var sortedVisibleObjects = objectsVisible.AsList()
+                                          ?.Where(t => this.EnabledEntityList.Contains(t.PhysicsBody?.AssociatedWorldObject?.ProtoGameObject))
+                                          .OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(fromPos))
+                                          .ToList();
+            if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
+            {
+                return;
+            }
+
+            bool canAlreadyHit = sortedVisibleObjects[0].PhysicsBody.Position.DistanceTo(fromPos) < this.GetCurrentWeaponRange();
+            if (!canAlreadyHit)
+            {
+                MoveToClosestTarget(fromPos, sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject);
+                return; // Can safely ignore code below, because if we have to move to the closest object to attack it, we definitely cannot hit it.
+            }
+
+            // Better to leave this code as is and not to link `objectOfInterest` to `sortedVisibleObjects`. There is a foreach loop below over a _single_ object, so that may mean there can be several decoratie objects within one PhysicsBody. Probably. Or two trees standing nearby.
             using var objectsNearby = this.CurrentCharacter.PhysicsBody.PhysicsSpace
                                           .TestCircle(position: fromPos,
                                                       radius: this.GetCurrentWeaponRange(),
                                                       collisionGroup: CollisionGroups.HitboxMelee);
+
             var objectOfInterest = objectsNearby.AsList()
                                    ?.Where(t => this.EnabledEntityList.Contains(t.PhysicsBody?.AssociatedWorldObject?.ProtoGameObject))
                                    .ToList();
@@ -116,6 +149,16 @@
             ((PlayerCharacter)CurrentCharacter.ProtoCharacter).ClientSetInput(command);
             // TODO: prevent user mousemove to interrupt it
             SelectedItem.ProtoItem.ClientItemUseStart(SelectedItem);
+        }
+
+        public void MoveToClosestTarget(Vector2D weaponPos, IWorldObject targetObject)
+        {
+            Vector2D diff = targetObject.PhysicsBody.Position - weaponPos;
+
+            var moveModes = CharacterMoveModesHelper.CalculateMoveModes(diff) | CharacterMoveModes.ModifierRun; // Running will yield us more LP/minute (by miniscule amount, though)
+            var command = new CharacterInputUpdate(moveModes, 0); // Ugh, too lazy to look for usages to understand whether `0` is "up" or "right". Probably "right", but I won't mess with trigonometry, forgive me.
+            ((PlayerCharacter)CurrentCharacter.ProtoCharacter).ClientSetInput(command);
+
         }
 
         protected virtual double GetCurrentWeaponRange()

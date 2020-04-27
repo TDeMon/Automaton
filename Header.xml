@@ -4,10 +4,10 @@
   <game>CryoFall</game>
   <id>automaton</id>
   <title>Automaton mod</title>
-  <author>Djekke</author>
-  <description>Automaton mod for CryoFall. Simple tasks automation.</description>
+  <author>DjekkeXobotun</author>
+  <description>Automaton mod for CryoFall. Simple tasks automation. Now with auto-run to the nearest tree or stone</description>
   <version>0.3.4</version>
-  <updated>23.04.2020</updated>
+  <updated>27.04.2020</updated>
   <!-- Mod type: 1 - server, 2 - client-server, 3 - client -->
   <!-- Please note: mods of type 1 and 2 are ignored
                     when you're connecting to the server which is missing them -->

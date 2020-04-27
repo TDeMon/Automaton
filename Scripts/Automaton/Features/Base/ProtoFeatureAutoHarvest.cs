@@ -68,16 +68,18 @@
                                                       collisionGroup: CollisionGroups.HitboxMelee);
                                           
             // I'd rather chain these methods, but it seems like `using` has some relation to IDisposable. I'm not sure of consequences not using it might cause, so I'll copy the code. It's not like I want to keep your memeory free from leaks or anything.
-            var sortedVisibleObjects = objectsVisible.AsList()
+            var sortedVisibleObjects = objectsVisible?.AsList()
                                           ?.Where(t => this.EnabledEntityList.Contains(t.PhysicsBody?.AssociatedWorldObject?.ProtoGameObject))
-                                          .OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(fromPos))
-                                          .ToList();
+                                          ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject)
+                                          ?.Where(t => this.AdditionalValidation(t.PhysicsBody?.AssociatedWorldObject as IStaticWorldObject))
+                                          ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(fromPos))
+                                          ?.ToList();
             if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
             {
                 return;
             }
 
-            bool canAlreadyHit = sortedVisibleObjects[0].PhysicsBody.Position.DistanceTo(fromPos) < this.GetCurrentWeaponRange();
+            bool canAlreadyHit = sortedVisibleObjects[0].PhysicsBody.Position.DistanceTo(fromPos) < this.GetCurrentWeaponRange() / 2; // Get closer than maximal distance
             if (!canAlreadyHit)
             {
                 MoveToClosestTarget(fromPos, sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject);

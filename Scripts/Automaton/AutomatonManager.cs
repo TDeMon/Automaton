@@ -26,7 +26,7 @@
 
         private static List<ProtoFeature> featuresList;
 
-        public static double UpdateInterval = 0.5d;
+        public static double UpdateInterval = 0.25d;
 
         public static Version CurrentVersion => new Version("0.3.4");
 

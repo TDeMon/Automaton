@@ -42,6 +42,15 @@
                 {
                     ChopOnlyFullyGrown = value;
                 }));
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "IsWalkingEnabled",
+                label: IsWalkingEnabledText,
+                defaultValue: true,
+                valueChangedCallback: value =>
+                {
+                    IsWalkingEnabled = value;
+                }));
             Options.Add(new OptionSeparator());
             AddOptionEntityList(settingsFeature);
         }

@@ -33,3 +33,6 @@ Scripts/Automaton/Features/FeatureAutoWoodcutting@Description:
 
 Scripts/Automaton/Features/FeatureAutoWoodcutting@ChopOnlyFullyGrownText:
 Рубить только полностью выросшие деревья
+
+Scripts/Automaton/Features/ProtoFeatureAutoHarvest@IsWalkingEnabledText:
+Идти к ближайшей видимой цели

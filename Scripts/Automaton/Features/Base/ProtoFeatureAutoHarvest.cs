@@ -1,4 +1,7 @@
-﻿namespace CryoFall.Automaton.Features
+﻿using CryoFall.Automaton.ClientSettings;
+using CryoFall.Automaton.ClientSettings.Options;
+
+namespace CryoFall.Automaton.Features
 {
     using System;
     using System.Linq;
@@ -19,6 +22,10 @@
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
+        public virtual bool IsWalkingEnabled { get; set; }
+
+        public string IsWalkingEnabledText => "Enable walking to the nearest visible target";
+
         private bool attackInProgress = false;
 
         /// <summary>
@@ -57,6 +64,24 @@
         protected virtual bool ShouldCurrentWeaponTriggerMovement(IStaticWorldObject testWorldObject)
         {
             return true;
+        }
+
+        public override void PrepareOptions(SettingsFeature settingsFeature)
+        {
+            // Full override of default settings because we need to change order of some options.
+            AddOptionIsEnabled(settingsFeature);
+            Options.Add(new OptionSeparator());
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "IsWalkingEnabled",
+                label: IsWalkingEnabledText,
+                defaultValue: true,
+                valueChangedCallback: value =>
+                {
+                    IsWalkingEnabled = value;
+                }));
+            Options.Add(new OptionSeparator());
+            AddOptionEntityList(settingsFeature);
         }
 
         private IStaticWorldObject FindTarget(Vector2D weaponPos)
@@ -148,6 +173,8 @@
 
         public void MoveToClosestTarget(Vector2D weaponPos, IWorldObject targetObject)
         {
+            if (!IsWalkingEnabled) return;
+
             Vector2D diff = targetObject.PhysicsBody.Position - weaponPos;
 
             var moveModes = CharacterMoveModesHelper.CalculateMoveModes(diff) | CharacterMoveModes.ModifierRun; // Running will yield us more LP/minute (by miniscule amount, though)

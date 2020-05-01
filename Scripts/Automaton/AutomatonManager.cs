@@ -47,6 +47,7 @@
                 new FeatureAutoMining(),
                 new FeatureAutoWoodcutting(),
                 new FeatureAutoFill(),
+                new FeatureAutoWatering(),
             };
 
             foreach (var feature in featuresList)

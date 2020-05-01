@@ -21,7 +21,7 @@
                 parentSettings: this,
                 id: "UpdateInterval",
                 label: UpdateIntervalText,
-                defaultValue: 0.5d,
+                defaultValue: 0.25d,
                 valueChangedCallback: (val) => AutomatonManager.UpdateInterval = val,
                 toolTip: UpdateIntervalToolTip));
         }

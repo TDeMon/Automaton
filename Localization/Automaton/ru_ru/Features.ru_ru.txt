@@ -36,3 +36,9 @@ Scripts/Automaton/Features/FeatureAutoWoodcutting@ChopOnlyFullyGrownText:
 
 Scripts/Automaton/Features/ProtoFeatureAutoHarvest@IsWalkingEnabledText:
 Идти к ближайшей видимой цели
+
+Scripts/Automaton/Features/FeatureAutoWatering@Name:
+АвтоПоливайка
+
+Scripts/Automaton/Features/FeatureAutoWatering@Description:
+Автоматически полтивает грядки, если лейка в руках.

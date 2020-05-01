@@ -19,6 +19,8 @@ namespace CryoFall.Automaton.Features
     using AtomicTorch.CBND.GameApi.Scripting;
     using AtomicTorch.GameEngine.Common.Extensions;
     using AtomicTorch.GameEngine.Common.Primitives;
+    using AtomicTorch.CBND.CoreMod.Systems.Notifications;
+
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
@@ -92,12 +94,12 @@ namespace CryoFall.Automaton.Features
                                                       radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit.
                                                       collisionGroup: CollisionGroups.HitboxMelee);
 
-            // I'd rather chain these methods, but it seems like `using` has some relation to IDisposable. I'm not sure of consequences not using it might cause, so I'll copy the code. It's not like I want to keep your memeory free from leaks or anything.
+            // I'd rather chain these methods, but it seems like `using` has some relation to IDisposable. I'm not sure of consequences not using it might cause, so I'll copy the code. It's not like I want to keep your memory free from leaks or anything.
             var sortedVisibleObjects = objectsVisible?.AsList()
                                           ?.Where(t => this.EnabledEntityList.Contains(t.PhysicsBody?.AssociatedWorldObject?.ProtoGameObject))
                                           ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject)
                                           ?.Where(t => this.AdditionalValidation(t.PhysicsBody?.AssociatedWorldObject as IStaticWorldObject))
-                                          //?.Where(t => this.CheckForObstacles(t.PhysicsBody.AssociatedWorldObject, weaponPos, searchDistance))
+                                          ?.Where(t => this.CheckIsVisible(t.PhysicsBody, weaponPos))
                                           ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(weaponPos))
                                           ?.ToList();
             if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
@@ -110,7 +112,7 @@ namespace CryoFall.Automaton.Features
 
         private void FindAndAttackTarget( )
         {
-            var fromPos = CurrentCharacter.Position + GetWeaponOffset();
+            var fromPos = CurrentCharacter.Position; // or + GetWeaponOffset()?
 
             IStaticWorldObject target = FindTarget(fromPos);
             if (target == null)
@@ -118,7 +120,7 @@ namespace CryoFall.Automaton.Features
                 return;
             }
 
-            bool canAlreadyHit = target.PhysicsBody.Position.DistanceTo(fromPos) < this.GetCurrentWeaponRange() / 2; // Get closer than maximal distance
+            bool canAlreadyHit = GetCenterPosition(target.PhysicsBody).DistanceTo(fromPos) < this.GetCurrentWeaponRange();
             if (!canAlreadyHit)
             {
                 MoveToClosestTarget(fromPos, target);
@@ -126,13 +128,7 @@ namespace CryoFall.Automaton.Features
             }
 
 
-            var shape = target.PhysicsBody.Shapes.FirstOrDefault(s => s.CollisionGroup == CollisionGroups.HitboxMelee);
-            if (shape == null)
-            {
-                Api.Logger.Error("Automaton: target object has no HitBoxMelee shape " + target);
-                return;
-            }
-            var targetPoint = this.ShapeCenter(shape) + target.PhysicsBody.Position;
+            var targetPoint = GetCenterPosition(target.PhysicsBody);
             if (this.CheckForObstacles(target, targetPoint, GetCurrentWeaponRange()))
             {
                 this.AttackTarget(target, targetPoint);
@@ -175,7 +171,9 @@ namespace CryoFall.Automaton.Features
         {
             if (!IsWalkingEnabled) return;
 
-            Vector2D diff = targetObject.PhysicsBody.Position - weaponPos;
+            Vector2D target = GetCenterPosition(targetObject.PhysicsBody);
+            //NotificationSystem.ClientShowNotification("" + target);
+            Vector2D diff = target - weaponPos;
 
             var moveModes = CharacterMoveModesHelper.CalculateMoveModes(diff) | CharacterMoveModes.ModifierRun; // Running will yield us more LP/minute (by miniscule amount, though)
             var command = new CharacterInputUpdate(moveModes, 0); // Ugh, too lazy to look for usages to understand whether `0` is "up" or "right". Probably "right", but I won't mess with trigonometry, forgive me.
@@ -204,6 +202,38 @@ namespace CryoFall.Automaton.Features
             var toolItem = SelectedItem.ProtoItem as IProtoItemWeaponMelee;
             return toolItem?.FireInterval ?? 0d;
         }
+
+        // Returns true if not obscured
+        private bool CheckIsVisible(IPhysicsBody targetObject, Vector2D weaponPos)
+        {
+            using var raycast = CurrentCharacter.PhysicsBody.PhysicsSpace.TestLine(
+                fromPosition: weaponPos,
+                toPosition: GetCenterPosition(targetObject),
+                collisionGroup: CollisionGroups.HitboxMelee
+                );
+
+            var visible = raycast?.AsList()
+                ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject) // Otherwise it will 99% times hit an item in your hands. For example, an axe.
+                ?.ToList(); 
+
+            if (visible == null || visible.Count == 0) return false;
+
+            var first = visible.ElementAt(0);
+
+            return first.PhysicsBody == targetObject;
+        }
+
+        private Vector2D GetCenterPosition(IPhysicsBody target)
+        {
+            var shape = target.Shapes.FirstOrDefault(s => s.CollisionGroup == CollisionGroups.HitboxMelee);
+            if (shape == null)
+            {
+                Api.Logger.Error("Automaton: target object has no HitBoxMelee shape " + target);
+                return target.Position; 
+            }
+            return this.ShapeCenter(shape) + target.Position;
+        }
+
 
         // Returns true if not obscured
         private bool CheckForObstacles(IWorldObject targetObject, Vector2D intersectionPoint, double maxDistance)

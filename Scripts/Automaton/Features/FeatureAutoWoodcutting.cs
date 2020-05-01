@@ -51,6 +51,15 @@
                 {
                     IsWalkingEnabled = value;
                 }));
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "ShouldCheckVisibility",
+                label: ShouldCheckVisibilityText,
+                defaultValue: true,
+                valueChangedCallback: value =>
+                {
+                    ShouldCheckVisibility = value;
+                }));
             Options.Add(new OptionSeparator());
             AddOptionEntityList(settingsFeature);
         }

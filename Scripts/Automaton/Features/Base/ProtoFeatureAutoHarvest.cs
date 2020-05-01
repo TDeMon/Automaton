@@ -25,10 +25,14 @@ namespace CryoFall.Automaton.Features
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
         public virtual bool IsWalkingEnabled { get; set; }
+        public virtual bool ShouldCheckVisibility { get; set; }
 
-        public string IsWalkingEnabledText => "Enable walking to the nearest visible target";
+        public string IsWalkingEnabledText => "Walk to the nearest target";
+        public string ShouldCheckVisibilityText => "Walk only to the visible target. Work in progress";
 
         private bool attackInProgress = false;
+
+        private IStaticWorldObject rememberedTarget; // To keep going to it when line of sight is lost
 
         /// <summary>
         /// Called by client component every tick.
@@ -82,6 +86,15 @@ namespace CryoFall.Automaton.Features
                 {
                     IsWalkingEnabled = value;
                 }));
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "ShouldCheckVisibility",
+                label: ShouldCheckVisibilityText,
+                defaultValue: true,
+                valueChangedCallback: value =>
+                {
+                    ShouldCheckVisibility = value;
+                }));
             Options.Add(new OptionSeparator());
             AddOptionEntityList(settingsFeature);
         }
@@ -89,6 +102,12 @@ namespace CryoFall.Automaton.Features
         private IStaticWorldObject FindTarget(Vector2D weaponPos)
         {
             double searchDistance = GetCurrentWeaponRange() * 25;
+            if (rememberedTarget != null && !rememberedTarget.IsDestroyed && rememberedTarget.PhysicsBody.Position.DistanceTo(weaponPos) < searchDistance)
+            {
+                return rememberedTarget;
+            }
+
+            
             using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
                                           .TestCircle(position: weaponPos,
                                                       radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit.
@@ -107,7 +126,8 @@ namespace CryoFall.Automaton.Features
                 return null;
             }
 
-            return sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject as IStaticWorldObject; // checked somewhere in the stream above
+            rememberedTarget = sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject as IStaticWorldObject; // NPE checked somewhere in the stream above
+            return rememberedTarget;
         }
 
         private void FindAndAttackTarget( )
@@ -120,7 +140,7 @@ namespace CryoFall.Automaton.Features
                 return;
             }
 
-            bool canAlreadyHit = GetCenterPosition(target.PhysicsBody).DistanceTo(fromPos) < this.GetCurrentWeaponRange();
+            bool canAlreadyHit = GetCenterPosition(target.PhysicsBody).DistanceTo(fromPos) < this.GetCurrentWeaponRange() / 1.1; // Get a bit closer to the target than maximal range.
             if (!canAlreadyHit)
             {
                 MoveToClosestTarget(fromPos, target);
@@ -206,6 +226,8 @@ namespace CryoFall.Automaton.Features
         // Returns true if not obscured
         private bool CheckIsVisible(IPhysicsBody targetObject, Vector2D weaponPos)
         {
+            if (!ShouldCheckVisibility) return true;
+
             using var raycast = CurrentCharacter.PhysicsBody.PhysicsSpace.TestLine(
                 fromPosition: weaponPos,
                 toPosition: GetCenterPosition(targetObject),
@@ -336,6 +358,7 @@ namespace CryoFall.Automaton.Features
                 attackInProgress = false;
                 StopItemUse();
             }
+            rememberedTarget = null;
         }
     }
 }

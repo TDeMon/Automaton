@@ -35,7 +35,10 @@ Scripts/Automaton/Features/FeatureAutoWoodcutting@ChopOnlyFullyGrownText:
 Рубить только полностью выросшие деревья
 
 Scripts/Automaton/Features/ProtoFeatureAutoHarvest@IsWalkingEnabledText:
-Идти к ближайшей видимой цели
+Идти к ближайшей цели
+
+Scripts/Automaton/Features/ProtoFeatureAutoHarvest@ShouldCheckVisibilityText:
+Идти только к видимой цели. Работает криво
 
 Scripts/Automaton/Features/FeatureAutoWatering@Name:
 АвтоПоливайка

@@ -20,13 +20,13 @@
             if (shape == null)
             {
                 Api.Logger.Error("Automaton: target object has no HitBoxMelee shape " + targetObject);
-                return new StraightMovementPath(startPos, startPos);
+                return new StraightMovementPath(startPos, startPos, targetObject);
             }
             else
             {
                 targetPos = targetObject.PhysicsBody.Position;
             }
-            return new StraightMovementPath(startPos, targetPos);
+            return new StraightMovementPath(startPos, targetPos, targetObject);
         }
     }
 }

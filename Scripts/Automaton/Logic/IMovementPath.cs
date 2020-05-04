@@ -4,7 +4,6 @@
     using AtomicTorch.GameEngine.Common.Primitives;
     using System;
     using System.Collections.Generic;
-    using System.IO;
 
     internal interface IMovementPath // implements java.util.Iterator
     {
@@ -16,6 +15,9 @@
 
         // Should not return StartPoint.
         Vector2D NextPoint { get; }
+
+        // For debug purposes
+        List<Vector2D> Points { get; }
 
         // Returns next point or EndpointPoint.
         bool HasNext { get; }
@@ -34,6 +36,17 @@
         public IWorldObject Target { get; private set; }
 
         public Vector2D NextPoint => EndpointPoint;
+
+        public List<Vector2D> Points
+        {
+            get
+            {
+                List<Vector2D> pts = new List<Vector2D>(2);
+                pts.Add(StartPoint);
+                pts.Add(EndpointPoint);
+                return pts;
+            }
+        }
 
         public bool HasNext
         {
@@ -68,6 +81,8 @@
         public Vector2D EndpointPoint => points[points.Count - 1];
 
         public IWorldObject Target { get; private set; }
+
+        public List<Vector2D> Points => points;
 
         public Vector2D NextPoint
         {

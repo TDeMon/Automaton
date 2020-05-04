@@ -24,6 +24,8 @@ namespace CryoFall.Automaton.Features
     using System.Windows.Documents;
     using System.Collections.Generic;
     using AtomicTorch.CBND.GameApi.Scripting.ClientComponents;
+    using CryoFall.Automaton.Scripts.Automaton.Logic;
+    using CryoFall.Automaton.Scripts.Automaton.Helper;
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
@@ -37,7 +39,10 @@ namespace CryoFall.Automaton.Features
 
         private bool attackInProgress = false;
 
-        private IStaticWorldObject rememberedTarget; // To keep going to it when line of sight is lost
+        private IMovementPath rememberedPath;
+        private Vector2D? currentWaypoint;
+
+        private IMovementPathCalculator pathfinder = new MovementPathCalculator();
 
         /// <summary>
         /// Called by client component every tick.
@@ -113,17 +118,17 @@ namespace CryoFall.Automaton.Features
             AddOptionEntityList(settingsFeature);
         }
 
-        private IStaticWorldObject FindTarget(Vector2D weaponPos)
+        private IMovementPath FindTarget(Vector2D weaponPos)
         {
             double searchDistance = GetCurrentWeaponRange() * 25;
-            if (rememberedTarget != null && !rememberedTarget.IsDestroyed && rememberedTarget.PhysicsBody.Position.DistanceTo(weaponPos) < searchDistance)
+            if (rememberedPath != null && !rememberedPath.Target.IsDestroyed && rememberedPath.Target.PhysicsBody.Position.DistanceTo(weaponPos) < searchDistance)
             {
-                return rememberedTarget;
+                return rememberedPath;
             }
             
             using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
                                           .TestCircle(position: weaponPos,
-                                                      radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit.
+                                                      radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit. // UPD: Apparently it uses units. So, 1 tile is unit. 
                                                       collisionGroup: CollisionGroups.HitboxMelee, 
                                                       sendDebugEvent: false);
 
@@ -132,46 +137,46 @@ namespace CryoFall.Automaton.Features
                                           ?.Where(t => this.EnabledEntityList.Contains(t.PhysicsBody?.AssociatedWorldObject?.ProtoGameObject))
                                           ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject)
                                           ?.Where(t => this.AdditionalValidation(t.PhysicsBody?.AssociatedWorldObject as IStaticWorldObject))
-                                          ?.Where(t => this.CheckIsVisible(t.PhysicsBody, weaponPos))
-                                          ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(weaponPos))
+                                          // ?.Where(t => this.CheckIsVisible(t.PhysicsBody, weaponPos))
+                                          ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(weaponPos)) // Get closest ones
+                                          ?.Take(10) // But take only 10 of them to reduce the load onto the pathfinder and eliminate the possibility of freezes. We're calculating in the UI thread. :D
+                                          ?.Select(tgt => pathfinder.GetPath(weaponPos, tgt.PhysicsBody.AssociatedWorldObject))
+                                          ?.OrderBy(path => path.Length)
                                           ?.ToList();
             if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
             {
                 return null;
             }
 
-            rememberedTarget = sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject as IStaticWorldObject; // NPE checked somewhere in the stream above
+            rememberedPath = sortedVisibleObjects[0];
 
-            List<Vector2D> navpoints = new List<Vector2D>(2);
-            navpoints.Add(weaponPos);
-            navpoints.Add(GetCenterPosition(rememberedTarget.PhysicsBody));
-            ClientComponentPathRenderer.Instance.SetPoints(navpoints);
+            ClientComponentPathRenderer.Instance.SetPoints(sortedVisibleObjects[0].Points);
 
-            return rememberedTarget;
+            return rememberedPath;
         }
 
         private void FindAndAttackTarget( )
         {
             var fromPos = CurrentCharacter.Position; // or + GetWeaponOffset()?
 
-            IStaticWorldObject target = FindTarget(fromPos);
-            if (target == null)
+            IMovementPath path = FindTarget(fromPos);
+            if (path == null)
             {
                 return;
             }
 
-            bool canAlreadyHit = GetCenterPosition(target.PhysicsBody).DistanceTo(fromPos) < this.GetCurrentWeaponRange() / 1.1; // Get a bit closer to the target than maximal range.
+            bool canAlreadyHit = GeometryHelper.GetCenterPosition(path.Target.PhysicsBody).DistanceTo(fromPos) < this.GetCurrentWeaponRange() / 1.1; // Get a bit closer to the target than maximal range.
             if (!canAlreadyHit)
             {
-                MoveToClosestTarget(fromPos, target);
+                FollowPath(fromPos, path);
                 return; // Can safely ignore code below, because if we have to move to the closest object to attack it, we definitely cannot hit it.
             }
 
 
-            var targetPoint = GetCenterPosition(target.PhysicsBody);
-            if (this.CheckForObstacles(target, targetPoint, GetCurrentWeaponRange()))
+            var targetPoint = GeometryHelper.GetCenterPosition(path.Target.PhysicsBody);
+            if (this.CheckForObstacles(path.Target.PhysicsBody as IStaticWorldObject, targetPoint, GetCurrentWeaponRange()))
             {
-                this.AttackTarget(target, targetPoint);
+                this.AttackTarget(path.Target.PhysicsBody as IStaticWorldObject, targetPoint);
                 this.attackInProgress = true;
                 ClientTimersSystem.AddAction(this.GetCurrentWeaponAttackDelay(), () =>
                                                                                     {
@@ -207,13 +212,23 @@ namespace CryoFall.Automaton.Features
             SelectedItem.ProtoItem.ClientItemUseStart(SelectedItem);
         }
 
-        public void MoveToClosestTarget(Vector2D weaponPos, IWorldObject targetObject)
+        internal void FollowPath(Vector2D weaponPos, IMovementPath path)
         {
             if (!IsWalkingEnabled) return;
 
-            Vector2D target = GetCenterPosition(targetObject.PhysicsBody);
-            //NotificationSystem.ClientShowNotification("" + target);
-            Vector2D diff = target - weaponPos;
+            if (!currentWaypoint.HasValue || currentWaypoint.Value.DistanceTo(weaponPos) < 0.1)
+            {
+                currentWaypoint = path.NextPoint;
+                Api.Logger.Dev("Automaton: Next waypoint is " + currentWaypoint);
+            }
+
+            if (!currentWaypoint.HasValue)
+            {
+                Api.Logger.Error("Automaton: Failed to get next waypoint");
+                return;
+            }
+
+            Vector2D diff = currentWaypoint.Value - weaponPos;
 
             var moveModes = CharacterMoveModesHelper.CalculateMoveModes(diff) | CharacterMoveModes.ModifierRun; // Running will yield us more LP/minute (by miniscule amount, though)
             var command = new CharacterInputUpdate(moveModes, 0); // Ugh, too lazy to look for usages to understand whether `0` is "up" or "right". Probably "right", but I won't mess with trigonometry, forgive me.
@@ -250,7 +265,7 @@ namespace CryoFall.Automaton.Features
 
             using var raycast = CurrentCharacter.PhysicsBody.PhysicsSpace.TestLine(
                 fromPosition: weaponPos,
-                toPosition: GetCenterPosition(targetObject),
+                toPosition: GeometryHelper.GetCenterPosition(targetObject),
                 collisionGroup: CollisionGroups.HitboxMelee
                 );
 
@@ -264,18 +279,6 @@ namespace CryoFall.Automaton.Features
 
             return first.PhysicsBody == targetObject;
         }
-
-        private Vector2D GetCenterPosition(IPhysicsBody target)
-        {
-            var shape = target.Shapes.FirstOrDefault(s => s.CollisionGroup == CollisionGroups.HitboxMelee);
-            if (shape == null)
-            {
-                Api.Logger.Error("Automaton: target object has no HitBoxMelee shape " + target);
-                return target.Position; 
-            }
-            return this.ShapeCenter(shape) + target.Position;
-        }
-
 
         // Returns true if not obscured
         private bool CheckForObstacles(IWorldObject targetObject, Vector2D intersectionPoint, double maxDistance)
@@ -335,34 +338,6 @@ namespace CryoFall.Automaton.Features
             return canReachObject;
         }
 
-        private Vector2D ShapeCenter(IPhysicsShape shape)
-        {
-            if (shape != null)
-            {
-                switch (shape.ShapeType)
-                {
-                    case ShapeType.Rectangle:
-                        var shapeRectangle = (RectangleShape)shape;
-                        return shapeRectangle.Position + shapeRectangle.Size / 2d;
-                    case ShapeType.Point:
-                        var shapePoint = (PointShape)shape;
-                        return shapePoint.Point;
-                    case ShapeType.Circle:
-                        var shapeCircle = (CircleShape)shape;
-                        return shapeCircle.Center;
-                    case ShapeType.Line:
-                        break;
-                    case ShapeType.LineSegment:
-                        var lineSegmentShape = (LineSegmentShape)shape;
-                        return new Vector2D((lineSegmentShape.Point1.X + lineSegmentShape.Point2.X) / 2d,
-                                     (lineSegmentShape.Point1.Y + lineSegmentShape.Point2.Y) / 2d);
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-            return new Vector2D(0, 0);
-        }
-
         private void StopItemUse()
         {
             SelectedItem?.ProtoItem.ClientItemUseFinish(SelectedItem);
@@ -378,9 +353,10 @@ namespace CryoFall.Automaton.Features
                 attackInProgress = false;
                 StopItemUse();
             }
-            rememberedTarget = null;
+            rememberedPath = null;
+            currentWaypoint = null;
 
-            ClientComponentPathRenderer.IsDrawing = false;
+            // ClientComponentPathRenderer.IsDrawing = false;
         }
 
         public override void Start(ClientComponent parentComponent)

@@ -17,6 +17,7 @@
         public static bool IsDrawing {
             get => isDrawing;
             set {
+                Api.Logger.Dev($"Automaton: previous renderer {isDrawing}, current {value}");
                 if (!isDrawing && value)
                 {
                     Instance.OnEnable();
@@ -90,13 +91,14 @@
             {
                 return;
             }
+
             OnDisable();
             this.points = points;
-            // NotificationSystem.ClientShowNotification("Setting points to\n[br]" + points.ConvertAll(p => "X: " + (int)p.X +  " Y: " + (int)p.Y).Aggregate((agg, p) => agg + "\n[br]" + p));
+            NotificationSystem.ClientShowNotification("Setting points to\n[br]" + points.ConvertAll(p => "X: " + (int)p.X +  " Y: " + (int)p.Y).Aggregate((agg, p) => agg + "\n[br]" + p));
             OnEnable();
         }
 
-        protected override void OnDisable()
+        private void RemoveLines()
         {
             foreach (var line in this.lines)
             {
@@ -106,15 +108,23 @@
             this.lines = new Line[0];
         }
 
+        protected override void OnDisable()
+        {
+            RemoveLines();
+
+            NotificationSystem.ClientShowNotification("Automaton debug lines off");
+        }
+
         protected override void OnEnable()
         {
             if (lines.Length != 0)
             {
-                OnDisable(); // clear old lines
+                RemoveLines();
             }
 
             if (points == null || points.Count == 0)
             {
+                Api.Logger.Error("Automaton: no points were passed to the renderer ");
                 return;
             }
 
@@ -131,6 +141,8 @@
                 Api.Client.UI.LayoutRootChildren.Add(line);
                 this.lines[i] = line;
             }
+
+            NotificationSystem.ClientShowNotification("Automaton debug lines on");
         }
     }
 }

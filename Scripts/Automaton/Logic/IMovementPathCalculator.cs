@@ -4,6 +4,7 @@
     using AtomicTorch.CBND.GameApi.Data.World;
     using AtomicTorch.CBND.GameApi.Scripting;
     using AtomicTorch.GameEngine.Common.Primitives;
+    using CryoFall.Automaton.Scripts.Automaton.Helper;
     using System.Linq;
 
     internal interface IMovementPathCalculator
@@ -24,7 +25,7 @@
             }
             else
             {
-                targetPos = targetObject.PhysicsBody.Position;
+                targetPos = GeometryHelper.GetCenterPosition(targetObject.PhysicsBody);
             }
             return new StraightMovementPath(startPos, targetPos, targetObject);
         }

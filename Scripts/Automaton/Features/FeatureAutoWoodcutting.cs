@@ -10,6 +10,7 @@
     using AtomicTorch.CBND.GameApi.Scripting;
     using CryoFall.Automaton.ClientSettings;
     using CryoFall.Automaton.ClientSettings.Options;
+    using CryoFall.Automaton.Debug;
 
     public class FeatureAutoWoodcutting: ProtoFeatureAutoHarvest
     {
@@ -59,6 +60,15 @@
                 valueChangedCallback: value =>
                 {
                     ShouldCheckVisibility = value;
+                }));
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "DrawDebugLines",
+                label: DrawDebugLinesText,
+                defaultValue: false,
+                valueChangedCallback: value =>
+                {
+                    ClientComponentPathRenderer.IsDrawing = value;
                 }));
             Options.Add(new OptionSeparator());
             AddOptionEntityList(settingsFeature);

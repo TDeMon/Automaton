@@ -40,6 +40,9 @@ Scripts/Automaton/Features/ProtoFeatureAutoHarvest@IsWalkingEnabledText:
 Scripts/Automaton/Features/ProtoFeatureAutoHarvest@ShouldCheckVisibilityText:
 Идти только к видимой цели. Работает криво
 
+Scripts/Automaton/Features/ProtoFeatureAutoHarvest@DrawDebugLinesText:
+Рисовать отладочные линии
+
 Scripts/Automaton/Features/FeatureAutoWatering@Name:
 АвтоПоливайка
 

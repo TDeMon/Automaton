@@ -20,15 +20,20 @@ namespace CryoFall.Automaton.Features
     using AtomicTorch.GameEngine.Common.Extensions;
     using AtomicTorch.GameEngine.Common.Primitives;
     using AtomicTorch.CBND.CoreMod.Systems.Notifications;
-
+    using CryoFall.Automaton.Debug;
+    using System.Windows.Documents;
+    using System.Collections.Generic;
+    using AtomicTorch.CBND.GameApi.Scripting.ClientComponents;
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
         public virtual bool IsWalkingEnabled { get; set; }
         public virtual bool ShouldCheckVisibility { get; set; }
+        public virtual bool DrawDebugLines { get; set; }
 
         public string IsWalkingEnabledText => "Walk to the nearest target";
         public string ShouldCheckVisibilityText => "Walk only to the visible target. Work in progress";
+        public string DrawDebugLinesText => "Draw debug lines";
 
         private bool attackInProgress = false;
 
@@ -95,6 +100,15 @@ namespace CryoFall.Automaton.Features
                 {
                     ShouldCheckVisibility = value;
                 }));
+            Options.Add(new OptionCheckBox(
+                parentSettings: settingsFeature,
+                id: "DrawDebugLines",
+                label: DrawDebugLinesText,
+                defaultValue: false,
+                valueChangedCallback: value =>
+                {
+                    ClientComponentPathRenderer.IsDrawing = value;
+                }));
             Options.Add(new OptionSeparator());
             AddOptionEntityList(settingsFeature);
         }
@@ -106,7 +120,6 @@ namespace CryoFall.Automaton.Features
             {
                 return rememberedTarget;
             }
-
             
             using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
                                           .TestCircle(position: weaponPos,
@@ -127,6 +140,12 @@ namespace CryoFall.Automaton.Features
             }
 
             rememberedTarget = sortedVisibleObjects[0].PhysicsBody.AssociatedWorldObject as IStaticWorldObject; // NPE checked somewhere in the stream above
+
+            List<Vector2D> navpoints = new List<Vector2D>(2);
+            navpoints.Add(weaponPos);
+            navpoints.Add(GetCenterPosition(rememberedTarget.PhysicsBody));
+            ClientComponentPathRenderer.Instance.SetPoints(navpoints);
+
             return rememberedTarget;
         }
 
@@ -359,6 +378,13 @@ namespace CryoFall.Automaton.Features
                 StopItemUse();
             }
             rememberedTarget = null;
+
+            ClientComponentPathRenderer.IsDrawing = false;
+        }
+
+        public override void Start(ClientComponent parentComponent)
+        {
+            base.Start(parentComponent);
         }
     }
 }

@@ -124,7 +124,8 @@ namespace CryoFall.Automaton.Features
             using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
                                           .TestCircle(position: weaponPos,
                                                       radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit.
-                                                      collisionGroup: CollisionGroups.HitboxMelee);
+                                                      collisionGroup: CollisionGroups.HitboxMelee, 
+                                                      sendDebugEvent: false);
 
             // I'd rather chain these methods, but it seems like `using` has some relation to IDisposable. I'm not sure of consequences not using it might cause, so I'll copy the code. It's not like I want to keep your memory free from leaks or anything.
             var sortedVisibleObjects = objectsVisible?.AsList()

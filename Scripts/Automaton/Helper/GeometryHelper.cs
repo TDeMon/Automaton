@@ -1,17 +1,20 @@
 ﻿using AtomicTorch.CBND.CoreMod.Systems.Physics;
 using AtomicTorch.CBND.GameApi.Data.Physics;
+using AtomicTorch.CBND.GameApi.Data.World;
 using AtomicTorch.CBND.GameApi.Scripting;
 using AtomicTorch.GameEngine.Common.Primitives;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CryoFall.Automaton.Scripts.Automaton.Helper
 {
     class GeometryHelper
     {
+        public static Vector2D TileCenter(Tile tile)
+        {
+            return new Vector2D(tile.Position.X + 0.5, tile.Position.Y + 0.5);
+        }
+
         public static Vector2D GetCenterPosition(IPhysicsBody target)
         {
             var shape = target.Shapes.FirstOrDefault(s => s.CollisionGroup == CollisionGroups.HitboxMelee);

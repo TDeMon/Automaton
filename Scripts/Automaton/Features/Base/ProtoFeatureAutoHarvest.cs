@@ -21,14 +21,14 @@ namespace CryoFall.Automaton.Features
     using AtomicTorch.GameEngine.Common.Primitives;
     using AtomicTorch.CBND.CoreMod.Systems.Notifications;
     using CryoFall.Automaton.Debug;
-    using System.Windows.Documents;
-    using System.Collections.Generic;
     using AtomicTorch.CBND.GameApi.Scripting.ClientComponents;
     using CryoFall.Automaton.Scripts.Automaton.Logic;
     using CryoFall.Automaton.Scripts.Automaton.Helper;
+    using AtomicTorch.CBND.GameApi.Data.Characters;
 
     public abstract class ProtoFeatureAutoHarvest: ProtoFeature
     {
+        public const double WAYPOINT_RADIUS = 0.25;
         public virtual bool IsWalkingEnabled { get; set; }
         public virtual bool ShouldCheckVisibility { get; set; }
         public virtual bool DrawDebugLines { get; set; }
@@ -42,7 +42,7 @@ namespace CryoFall.Automaton.Features
         private IMovementPath rememberedPath;
         private Vector2D? currentWaypoint;
 
-        private IMovementPathCalculator pathfinder = new MovementPathCalculator();
+        private IMovementPathCalculator pathfinder = new AStarPathCalculator();
 
         /// <summary>
         /// Called by client component every tick.
@@ -118,16 +118,17 @@ namespace CryoFall.Automaton.Features
             AddOptionEntityList(settingsFeature);
         }
 
-        private IMovementPath FindTarget(Vector2D weaponPos)
+        private IMovementPath FindTarget()
         {
+            ICharacter user = CurrentCharacter;
             double searchDistance = GetCurrentWeaponRange() * 25;
-            if (rememberedPath != null && !rememberedPath.Target.IsDestroyed && rememberedPath.Target.PhysicsBody.Position.DistanceTo(weaponPos) < searchDistance)
+            if (rememberedPath != null && !rememberedPath.Target.IsDestroyed && rememberedPath.Target.PhysicsBody.Position.DistanceTo(user.Position) < searchDistance)
             {
                 return rememberedPath;
             }
             
             using var objectsVisible = this.CurrentCharacter.PhysicsBody.PhysicsSpace
-                                          .TestCircle(position: weaponPos,
+                                          .TestCircle(position: user.Position,
                                                       radius: searchDistance, // I don't know what units the game uses, so let's stick with the search radius ~25 times as far as the weapon can hit. // UPD: Apparently it uses units. So, 1 tile is unit. 
                                                       collisionGroup: CollisionGroups.HitboxMelee, 
                                                       sendDebugEvent: false);
@@ -138,9 +139,9 @@ namespace CryoFall.Automaton.Features
                                           ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject)
                                           ?.Where(t => this.AdditionalValidation(t.PhysicsBody?.AssociatedWorldObject as IStaticWorldObject))
                                           // ?.Where(t => this.CheckIsVisible(t.PhysicsBody, weaponPos))
-                                          ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(weaponPos)) // Get closest ones
+                                          ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(user.Position)) // Get closest ones
                                           ?.Take(10) // But take only 10 of them to reduce the load onto the pathfinder and eliminate the possibility of freezes. We're calculating in the UI thread. :D
-                                          ?.Select(tgt => pathfinder.GetPath(weaponPos, tgt.PhysicsBody.AssociatedWorldObject))
+                                          ?.Select(tgt => pathfinder.GetPath(user, tgt.PhysicsBody.AssociatedWorldObject))
                                           ?.OrderBy(path => path.Length)
                                           ?.ToList();
             if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
@@ -159,7 +160,7 @@ namespace CryoFall.Automaton.Features
         {
             var fromPos = CurrentCharacter.Position; // or + GetWeaponOffset()?
 
-            IMovementPath path = FindTarget(fromPos);
+            IMovementPath path = FindTarget();
             if (path == null)
             {
                 return;
@@ -172,7 +173,6 @@ namespace CryoFall.Automaton.Features
                 return; // Can safely ignore code below, because if we have to move to the closest object to attack it, we definitely cannot hit it.
             }
 
-
             var targetPoint = GeometryHelper.GetCenterPosition(path.Target.PhysicsBody);
             if (this.CheckForObstacles(path.Target.PhysicsBody as IStaticWorldObject, targetPoint, GetCurrentWeaponRange()))
             {
@@ -183,6 +183,7 @@ namespace CryoFall.Automaton.Features
                                                                                         if (this.attackInProgress)
                                                                                         {
                                                                                             this.attackInProgress = false;
+                                                                                            this.rememberedPath = null;
                                                                                             this.StopItemUse();
                                                                                             this.FindAndAttackTarget();
                                                                                         }
@@ -216,7 +217,7 @@ namespace CryoFall.Automaton.Features
         {
             if (!IsWalkingEnabled) return;
 
-            if (!currentWaypoint.HasValue || currentWaypoint.Value.DistanceTo(weaponPos) < 0.1)
+            if (!currentWaypoint.HasValue || currentWaypoint.Value.DistanceTo(weaponPos) < WAYPOINT_RADIUS)
             {
                 currentWaypoint = path.NextPoint;
                 Api.Logger.Dev("Automaton: Next waypoint is " + currentWaypoint);
@@ -256,28 +257,6 @@ namespace CryoFall.Automaton.Features
         {
             var toolItem = SelectedItem.ProtoItem as IProtoItemWeaponMelee;
             return toolItem?.FireInterval ?? 0d;
-        }
-
-        // Returns true if not obscured
-        private bool CheckIsVisible(IPhysicsBody targetObject, Vector2D weaponPos)
-        {
-            if (!ShouldCheckVisibility) return true;
-
-            using var raycast = CurrentCharacter.PhysicsBody.PhysicsSpace.TestLine(
-                fromPosition: weaponPos,
-                toPosition: GeometryHelper.GetCenterPosition(targetObject),
-                collisionGroup: CollisionGroups.HitboxMelee
-                );
-
-            var visible = raycast?.AsList()
-                ?.Where(t => t.PhysicsBody?.AssociatedWorldObject is IStaticWorldObject) // Otherwise it will 99% times hit an item in your hands. For example, an axe.
-                ?.ToList(); 
-
-            if (visible == null || visible.Count == 0) return false;
-
-            var first = visible.ElementAt(0);
-
-            return first.PhysicsBody == targetObject;
         }
 
         // Returns true if not obscured

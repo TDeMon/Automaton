@@ -1,9 +1,11 @@
 ﻿namespace CryoFall.Automaton.Scripts.Automaton.Logic
 {
+    using AtomicTorch.CBND.GameApi.Data.Characters;
     using AtomicTorch.CBND.GameApi.Data.World;
     using AtomicTorch.GameEngine.Common.Primitives;
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     internal interface IMovementPath // implements java.util.Iterator
     {
@@ -120,5 +122,29 @@
             this.points = points;
             Target = target;
         }
+    }
+
+    class NoPathPath : IMovementPath
+    {
+        private ICharacter Player;
+
+        public NoPathPath(ICharacter player)
+        {
+            Player = player;
+        }
+
+        public Vector2D StartPoint => Player.Position;
+
+        public Vector2D EndpointPoint => Player.Position;
+
+        public IWorldObject Target => Player;
+
+        public Vector2D NextPoint => Player.Position;
+
+        public List<Vector2D> Points => new List<Vector2D> (Enumerable.Repeat(Player.Position, 1));
+
+        public bool HasNext => false;
+
+        public double Length => 0;
     }
 }

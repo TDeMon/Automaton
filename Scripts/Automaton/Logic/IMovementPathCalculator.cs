@@ -1,6 +1,8 @@
 ﻿namespace CryoFall.Automaton.Scripts.Automaton.Logic
 {
+    using AtomicTorch.CBND.CoreMod.StaticObjects.Structures.Doors;
     using AtomicTorch.CBND.CoreMod.Systems.Physics;
+    using AtomicTorch.CBND.CoreMod.Systems.WorldObjectOwners;
     using AtomicTorch.CBND.GameApi.Data.Characters;
     using AtomicTorch.CBND.GameApi.Data.Physics;
     using AtomicTorch.CBND.GameApi.Data.World;
@@ -46,6 +48,11 @@
             Tile playerTile = user.Tile;
             Vector2Ushort targetTilePos = targetObject.TilePosition;
 
+            if (playerTile.Position == targetTilePos) // User activated the script while already standing near to the target
+            {
+                return new StraightMovementPath(user.Position, GeometryHelper.TileCenter(playerTile), targetObject);
+            }
+
             SortedSet<PathCandidate> candidates = new SortedSet<PathCandidate>();
             HashSet<Tile> visited = new HashSet<Tile>();
             candidates.Add(PathCandidate.Init(playerTile, targetTilePos));
@@ -56,12 +63,6 @@
             {
                 PathCandidate withLeastWeight = candidates.Min();
                 candidates.Remove(withLeastWeight);
-
-                if (withLeastWeight.Head.Position == targetTilePos)
-                {
-                    return new WaypointMovementPath(withLeastWeight.AsTilesCenters(), targetObject);
-                }
-
                 var undiscovered = new HashSet<Tile>(withLeastWeight.Neighbours).Except(visited);
                 visited.Add(withLeastWeight.Head);
 
@@ -72,14 +73,14 @@
                         return new WaypointMovementPath(withLeastWeight.Fork(next).AsTilesCenters(), targetObject);
                     }
 
-                    if (CanTravel(user.PhysicsBody.PhysicsSpace, withLeastWeight.Head, next) && withLeastWeight.Length < MAX_PATH_TILES)
+                    if (CanTravel(user, withLeastWeight.Head, next) && withLeastWeight.Length < MAX_PATH_TILES)
                     {
                         candidates.Add(withLeastWeight.Fork(next));
                     }
                 }
             }
 
-            Api.Logger.Error($"Automaton: failed to find proper path from {playerTile.Position} to {targetTilePos}.");
+            // Api.Logger.Error($"Automaton: failed to find proper path from {playerTile.Position} to {targetTilePos}.");
             return new NoPathPath(user);
         }
 
@@ -131,9 +132,11 @@
                 return tiles.ConvertAll(tile => GeometryHelper.TileCenter(tile)).ToList();
             }
 
+            public double Weight => Length + GetDistanceToTargetTile() * 1.5; // Simply adding two number resulted in a very long freeze. Idk why.
+
             public int CompareTo(PathCandidate other)
             {
-                return (int)(GetDistanceToTargetTile() * 1000) - (int)(other.GetDistanceToTargetTile() * 1000);
+                return (int)(Weight * 1000) - (int)(other.Weight * 1000);
             }
         }
 
@@ -145,7 +148,7 @@
             }
         }
 
-        private bool CanTravel(IPhysicsSpace space, Tile from, Tile to)
+        private bool CanTravel(ICharacter user, Tile from, Tile to)
         {
             if (to.ProtoTile.Kind == TileKind.Water)
             {
@@ -157,7 +160,7 @@
                 return true;
             }
 
-            using var collisions = space.TestLine(
+            using var collisions = user.PhysicsBody.PhysicsSpace.TestLine(
                 fromPosition: GeometryHelper.TileCenter(from),
                 toPosition: GeometryHelper.TileCenter(to),
                 collisionGroup: CollisionGroups.HitboxMelee,
@@ -165,7 +168,11 @@
                 );
 
             
-            return collisions.AsList().Where(test => test.PhysicsBody.AssociatedWorldObject is IStaticWorldObject || test.PhysicsBody.AssociatedProtoTile != null ).Count() == 0;
+            return collisions.AsList()
+                //.Where(test => !(test.PhysicsBody.AssociatedWorldObject is IProtoObjectDoor door && door.GetPrivateState(door as IStaticWorldObject).Owners.Contains(user.Name)))
+                .Where(test => test.PhysicsBody.AssociatedWorldObject is IStaticWorldObject || 
+                               test.PhysicsBody.AssociatedProtoTile != null )
+                .Count() == 0;
         }
     }
 

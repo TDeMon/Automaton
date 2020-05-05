@@ -140,8 +140,11 @@ namespace CryoFall.Automaton.Features
                                           ?.Where(t => this.AdditionalValidation(t.PhysicsBody?.AssociatedWorldObject as IStaticWorldObject))
                                           // ?.Where(t => this.CheckIsVisible(t.PhysicsBody, weaponPos))
                                           ?.OrderBy(obj => obj.PhysicsBody.Position.DistanceTo(user.Position)) // Get closest ones
-                                          ?.Take(10) // But take only 10 of them to reduce the load onto the pathfinder and eliminate the possibility of freezes. We're calculating in the UI thread. :D
+                                          ?.Take(10) // But take only 10 of them to reduce the load onto the pathfinder and eliminate the possibility of freezes.
+                                          // ?.ToList() // Create a snapshot of the collection for the parallel executor
+                                          // ?.AsParallel() // Faster paths calculation that uses more than 1 core.
                                           ?.Select(tgt => pathfinder.GetPath(user, tgt.PhysicsBody.AssociatedWorldObject))
+                                          // ?.AsSequential()
                                           ?.OrderBy(path => path.Length)
                                           ?.ToList();
             if (sortedVisibleObjects == null || sortedVisibleObjects.Count == 0)
@@ -156,7 +159,7 @@ namespace CryoFall.Automaton.Features
             return rememberedPath;
         }
 
-        private void FindAndAttackTarget( )
+        private void FindAndAttackTarget()
         {
             var fromPos = CurrentCharacter.Position; // or + GetWeaponOffset()?
 
@@ -173,9 +176,12 @@ namespace CryoFall.Automaton.Features
                 return; // Can safely ignore code below, because if we have to move to the closest object to attack it, we definitely cannot hit it.
             }
 
+            // Api.Logger.Dev("Automaton: Got to the target! " + path.Target);
             var targetPoint = GeometryHelper.GetCenterPosition(path.Target.PhysicsBody);
             if (this.CheckForObstacles(path.Target.PhysicsBody as IStaticWorldObject, targetPoint, GetCurrentWeaponRange()))
+            // if (true)
             {
+                // Api.Logger.Dev("Automaton: Attacking the target! " + path.Target);
                 this.AttackTarget(path.Target.PhysicsBody as IStaticWorldObject, targetPoint);
                 this.attackInProgress = true;
                 ClientTimersSystem.AddAction(this.GetCurrentWeaponAttackDelay(), () =>
